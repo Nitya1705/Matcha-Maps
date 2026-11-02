@@ -212,3 +212,109 @@ def test_invalid_sort_parameter(client):
     response = client.get("/api/cafes?sort_by=rating")
 
     assert response.status_code == 422
+def test_empty_search_query(client):
+    response = client.get("/api/cafes?search=")
+
+    assert response.status_code == 422
+def test_city_filter_is_case_insensitive(client):
+    response = client.get("/api/cafes?city=DELHI")
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["total"] == 2
+
+    for cafe in data["cafes"]:
+        assert cafe["city"].lower() == "delhi"
+def test_category_filter_is_case_insensitive(client):
+    response = client.get("/api/cafes?category=MATCHA")
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["total"] == 2
+
+    for cafe in data["cafes"]:
+        assert "matcha" in [
+            category.lower()
+            for category in cafe["categories"]
+        ]
+def test_search_with_no_matching_results(client):
+    response = client.get("/api/cafes?search=Dragon Palace")
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["total"] == 0
+    assert data["cafes"] == []
+
+def test_cafe_with_optional_fields_missing(client):
+    from app.database import get_db
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    cafe = Cafe(
+        id=5,
+        name="Simple Cafe",
+        city="Kanpur",
+        categories=[],
+        address=None,
+        description=None,
+        price_range=None,
+        rating=None,
+    )
+
+    db.add(cafe)
+    db.commit()
+    db.close()
+
+    response = client.get("/api/cafes/5")
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["name"] == "Simple Cafe"
+    assert data["address"] is None
+    assert data["description"] == ""
+    assert data["price_range"] is None
+    assert data["rating"] is None
+
+def test_invalid_cafe_id_format(client):
+    response = client.get("/api/cafes/abc")
+
+    assert response.status_code == 422
+def test_negative_cafe_id(client):
+    response = client.get("/api/cafes/-1")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Cafe not found"
+def test_search_ignores_extra_spaces(client):
+    response = client.get("/api/cafes?search=%20%20Delhi%20%20")
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["total"] == 2
+def test_sort_cafes_by_name(client):
+    response = client.get("/api/cafes?sort_by=name")
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    cafe_names = [
+        cafe["name"]
+        for cafe in data["cafes"]
+    ]
+
+    assert cafe_names == sorted(cafe_names)
+def test_invalid_sort_value(client):
+    response = client.get("/api/cafes?sort_by=rating")
+
+    assert response.status_code == 422
